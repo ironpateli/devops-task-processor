@@ -12,8 +12,11 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 echo 'Running SonarQube Analysis...'
-                withSonarQubeEnv('sonar-server') { // Ensure 'sonar-server' matches your Jenkins config
-                    sh 'sonar-scanner'
+                script {
+                    def scannerHome = tool 'sonar-scanner'
+                    withSonarQubeEnv('sonar-server') { // Ensure 'sonar-server' matches your Jenkins config
+                        bat "${scannerHome}\\bin\\sonar-scanner.bat"
+                    }
                 }
             }
         }
@@ -31,7 +34,7 @@ pipeline {
             steps {
                 echo 'Building and deploying cluster using docker-compose...'
                 // Spin up 1 master and 3 workers in detached mode
-                sh 'docker-compose up -d --build'
+                bat 'docker-compose up -d --build'
             }
         }
     }

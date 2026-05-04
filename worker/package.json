@@ -1,0 +1,13 @@
+{
+  "name": "task-processor-worker",
+  "version": "1.0.0",
+  "description": "Worker node for Distributed Task Processor",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "crypto-js": "^4.2.0"
+  }
+}

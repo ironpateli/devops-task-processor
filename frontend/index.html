@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Health Monitoring Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <div class="header-left">
+                <h1>API Health Monitor</h1>
+                <p>Real-time status of your critical endpoints</p>
+            </div>
+            <div class="header-right">
+                <div class="auto-refresh-toggle">
+                    <input type="checkbox" id="autoRefresh" checked>
+                    <label for="autoRefresh">Auto-refresh (10s)</label>
+                </div>
+                <button id="refreshBtn" class="btn primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.28l5.67-5.67"/></svg>
+                    Refresh Now
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <div class="stats-overview">
+                <div class="stat-card">
+                    <h3>Total APIs</h3>
+                    <div class="stat-value" id="totalCount">-</div>
+                </div>
+                <div class="stat-card up">
+                    <h3>Healthy (UP)</h3>
+                    <div class="stat-value" id="upCount">-</div>
+                </div>
+                <div class="stat-card down">
+                    <h3>Failing (DOWN)</h3>
+                    <div class="stat-value" id="downCount">-</div>
+                </div>
+            </div>
+
+            <div class="content-section">
+                <div class="section-header">
+                    <h2>Monitored Endpoints</h2>
+                    <button id="addApiBtn" class="btn secondary">Add New API</button>
+                </div>
+
+                <div class="table-container">
+                    <table id="apiTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Response Time</th>
+                                <th>Last Checked</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apiTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for adding new API -->
+    <div id="addApiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New API to Monitor</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="addApiForm">
+                <div class="form-group">
+                    <label for="apiName">API Name</label>
+                    <input type="text" id="apiName" required placeholder="e.g., Payment Gateway">
+                </div>
+                <div class="form-group">
+                    <label for="apiUrl">API Endpoint URL</label>
+                    <input type="url" id="apiUrl" required placeholder="https://api.example.com/health">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn text close-btn">Cancel</button>
+                    <button type="submit" class="btn primary">Add API</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

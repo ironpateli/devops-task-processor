@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile.master
+    ports:
+      - "3000:3000"
+    networks:
+      - task-network
+    container_name: task-master
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - MASTER_URL=http://master:3000
+    depends_on:
+      - master
+    networks:
+      - task-network
+    # Using deploy.replicas in newer docker-compose or --scale in older
+    deploy:
+      replicas: 3
+
+networks:
+  task-network:
+    driver: bridge

@@ -1,0 +1,12 @@
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+COPY master/package*.json ./
+RUN npm install
+
+COPY master/ ./
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

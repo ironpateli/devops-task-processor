@@ -2,9 +2,11 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-south-1'
+        AWS_REGION = credentials('aws-region')
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
         ECR_REPOSITORY_API = 'task-processor-api'
         ECR_REPOSITORY_WEB = 'task-processor-web'
+        NODE_ENV = 'production'
     }
 
     stages {
@@ -18,15 +20,28 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-                bat 'npm --prefix apps/api ci'
-                bat 'npm --prefix apps/web ci'
+                script {
+                    if (isUnix()) {
+                        sh 'npm --prefix apps/api ci'
+                        sh 'npm --prefix apps/web ci'
+                    } else {
+                        bat 'npm --prefix apps/api ci'
+                        bat 'npm --prefix apps/web ci'
+                    }
+                }
             }
         }
 
         stage('Lint and Test') {
             steps {
                 echo 'Running tests...'
-                bat 'npm --prefix apps/api test'
+                script {
+                    if (isUnix()) {
+                        sh 'npm --prefix apps/api test'
+                    } else {
+                        bat 'npm --prefix apps/api test'
+                    }
+                }
             }
         }
 
@@ -36,11 +51,9 @@ pipeline {
                 script {
                     def scannerHome = tool 'sonar-scanner'
                     withSonarQubeEnv('sonar-server') {
-                        withEnv([
-                            'JAVA_HOME=C:\\Users\\asus\\.sonar\\cache\\39c5e23f3ce4d420663afba8ffde28034b72e2b3e240943dc2321bc1f912eef9\\OpenJDK21U-jre_x64_windows_hotspot_21.0.9_10.zip_extracted\\jdk-21.0.9+10-jre',
-                            'PATH+JAVA=C:\\Users\\asus\\.sonar\\cache\\39c5e23f3ce4d420663afba8ffde28034b72e2b3e240943dc2321bc1f912eef9\\OpenJDK21U-jre_x64_windows_hotspot_21.0.9_10.zip_extracted\\jdk-21.0.9+10-jre\\bin'
-                        ]) {
-                            bat 'java -version'
+                        if (isUnix()) {
+                            sh "${scannerHome}/bin/sonar-scanner"
+                        } else {
                             bat "${scannerHome}\\bin\\sonar-scanner.bat"
                         }
                     }
@@ -52,9 +65,33 @@ pipeline {
             steps {
                 echo 'Waiting for Quality Gate result...'
                 withSonarQubeEnv('sonar-server') {
-                    bat '''
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $env:WORKSPACE '.scannerwork\\report-task.txt'; if (!(Test-Path $taskFile)) { throw 'report-task.txt not found. Sonar analysis may not have completed.' }; $ceTaskUrl = (Get-Content $taskFile | Where-Object { $_ -like 'ceTaskUrl=*' } | Select-Object -First 1).Split('=')[1]; if (-not $ceTaskUrl) { throw 'ceTaskUrl missing in report-task.txt' }; if (-not $env:SONAR_AUTH_TOKEN) { throw 'SONAR_AUTH_TOKEN is missing in environment.' }; $pair = $env:SONAR_AUTH_TOKEN + ':'; $base64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair)); $headers = @{ Authorization = ('Basic ' + $base64) }; $analysisId = $null; for ($i = 0; $i -lt 180; $i++) { $task = Invoke-RestMethod -Uri $ceTaskUrl -Method Get -Headers $headers; if ($task.task.status -eq 'SUCCESS') { $analysisId = $task.task.analysisId; break }; if ($task.task.status -in @('FAILED','CANCELED')) { throw ('Sonar CE task failed with status: ' + $task.task.status) }; Start-Sleep -Seconds 5 }; if (-not $analysisId) { throw 'Timed out waiting for Sonar CE task completion.' }; $qgUrl = $env:SONAR_HOST_URL + '/api/qualitygates/project_status?analysisId=' + $analysisId; $qg = Invoke-RestMethod -Uri $qgUrl -Method Get -Headers $headers; $status = $qg.projectStatus.status; Write-Host ('Quality Gate status: ' + $status); if ($status -ne 'OK') { throw ('Quality Gate failed: ' + $status) }"
-'''
+                    script {
+                        if (isUnix()) {
+                            sh '''
+                                taskFile="${WORKSPACE}/.scannerwork/report-task.txt"
+                                if [ ! -f "$taskFile" ]; then
+                                    echo "ERROR: report-task.txt not found"
+                                    exit 1
+                                fi
+                                ceTaskId=$(grep ceTaskId= "$taskFile" | cut -d= -f2)
+                                while true; do
+                                    result=$(curl -s -u "${SONAR_AUTH_TOKEN}:" "${SONAR_HOST_URL}/api/ce/activity?id=${ceTaskId}" | grep -o '"status":"[^"]*"' | head -1)
+                                    if [[ "$result" == *"SUCCESS"* ]]; then
+                                        echo "Task completed successfully"
+                                        break
+                                    elif [[ "$result" == *"FAILED"* ]]; then
+                                        echo "Task failed"
+                                        exit 1
+                                    fi
+                                    sleep 2
+                                done
+                            '''
+                        } else {
+                            bat '''
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $env:WORKSPACE '.scannerwork\\report-task.txt'; if (!(Test-Path $taskFile)) { throw 'report-task.txt not found' }; $ceTaskId = (Select-String -Path $taskFile -Pattern 'ceTaskId=([^\\r\\n]+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }); while ($true) { $result = (curl.exe -s -u \"${env:SONAR_AUTH_TOKEN}:\" \"${env:SONAR_HOST_URL}/api/ce/activity?id=${ceTaskId}\" | Select-String -Pattern '\"status\":\"([^\"]+)\"' | ForEach-Object { $_.Matches[0].Groups[1].Value }); if ($result -eq 'SUCCESS') { Write-Host 'Task completed successfully'; break } elseif ($result -eq 'FAILED') { throw 'Task failed' }; Start-Sleep -Seconds 2 }"
+                            '''
+                        }
+                    }
                 }
             }
         }
@@ -62,21 +99,43 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $e
         stage('Build Docker Images') {
             steps {
                 echo 'Building API and Web images...'
-                bat 'docker compose -f docker-compose.dev.yml build'
+                script {
+                    if (isUnix()) {
+                        sh 'docker compose -f docker-compose.dev.yml build'
+                    } else {
+                        bat 'docker compose -f docker-compose.dev.yml build'
+                    }
+                }
             }
         }
 
         stage('Push to ECR') {
             when {
-                expression { return env.AWS_ACCOUNT_ID?.trim() }
+                expression { return env.AWS_ACCOUNT_ID?.trim() && env.AWS_REGION?.trim() }
             }
             steps {
                 echo 'Pushing images to ECR...'
-                bat 'aws ecr get-login-password --region %AWS_REGION% | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com'
-                bat 'docker tag task-processor-api:latest %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_API%:latest'
-                bat 'docker tag task-processor-web:latest %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_WEB%:latest'
-                bat 'docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_API%:latest'
-                bat 'docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_WEB%:latest'
+                script {
+                    def ecrUrl = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+                    if (isUnix()) {
+                        sh '''
+                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                            docker tag task-processor-api:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_API}:latest
+                            docker tag task-processor-web:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_WEB}:latest
+                            docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_API}:latest
+                            docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_WEB}:latest
+                        '''
+                    } else {
+                        bat '''
+                            for /f "tokens=*" %%i in ('aws ecr get-login-password --region %AWS_REGION%') do set PASSWORD=%%i
+                            echo %PASSWORD% | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
+                            docker tag task-processor-api:latest %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_API%:latest
+                            docker tag task-processor-web:latest %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_WEB%:latest
+                            docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_API%:latest
+                            docker push %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com/%ECR_REPOSITORY_WEB%:latest
+                        '''
+                    }
+                }
             }
         }
 
@@ -86,7 +145,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $e
             }
             steps {
                 echo 'Triggering ECS deployment...'
-                bat 'aws ecs update-service --cluster %ECS_CLUSTER% --service %ECS_SERVICE% --force-new-deployment --region %AWS_REGION%'
+                script {
+                    if (isUnix()) {
+                        sh 'aws ecs update-service --cluster ${ECS_CLUSTER} --service ${ECS_SERVICE} --force-new-deployment --region ${AWS_REGION}'
+                    } else {
+                        bat 'aws ecs update-service --cluster %ECS_CLUSTER% --service %ECS_SERVICE% --force-new-deployment --region %AWS_REGION%'
+                    }
+                }
             }
         }
     }
@@ -94,6 +159,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $e
     post {
         always {
             echo 'Pipeline execution finished.'
+            cleanWs()
         }
         success {
             echo 'Pipeline succeeded!'
@@ -103,4 +169,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $e
         }
     }
 }
-

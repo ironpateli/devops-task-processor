@@ -36,7 +36,13 @@ pipeline {
                 script {
                     def scannerHome = tool 'sonar-scanner'
                     withSonarQubeEnv('sonar-server') {
-                        bat "${scannerHome}\\bin\\sonar-scanner.bat"
+                        withEnv([
+                            'JAVA_HOME=C:\\Users\\asus\\.sonar\\cache\\39c5e23f3ce4d420663afba8ffde28034b72e2b3e240943dc2321bc1f912eef9\\OpenJDK21U-jre_x64_windows_hotspot_21.0.9_10.zip_extracted\\jdk-21.0.9+10-jre',
+                            'PATH+JAVA=C:\\Users\\asus\\.sonar\\cache\\39c5e23f3ce4d420663afba8ffde28034b72e2b3e240943dc2321bc1f912eef9\\OpenJDK21U-jre_x64_windows_hotspot_21.0.9_10.zip_extracted\\jdk-21.0.9+10-jre\\bin'
+                        ]) {
+                            bat 'java -version'
+                            bat "${scannerHome}\\bin\\sonar-scanner.bat"
+                        }
                     }
                 }
             }

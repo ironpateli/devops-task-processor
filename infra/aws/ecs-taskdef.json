@@ -1,0 +1,27 @@
+{
+  "family": "task-processor",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/task-processor-api:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 4000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PORT", "value": "4000" },
+        { "name": "DATABASE_URL", "value": "<set-in-secrets-manager-or-ssm>" },
+        { "name": "REDIS_URL", "value": "<elasticache-endpoint>" }
+      ]
+    },
+    {
+      "name": "web",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/task-processor-web:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }]
+    }
+  ]
+}

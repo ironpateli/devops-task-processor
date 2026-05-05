@@ -51,8 +51,10 @@ pipeline {
         stage('Quality Gate Check') {
             steps {
                 echo 'Waiting for Quality Gate result...'
-                timeout(time: 15, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                withSonarQubeEnv('sonar-server') {
+                    bat '''
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $env:WORKSPACE '.scannerwork\\report-task.txt'; if (!(Test-Path $taskFile)) { throw 'report-task.txt not found. Sonar analysis may not have completed.' }; $ceTaskUrl = (Get-Content $taskFile | Where-Object { $_ -like 'ceTaskUrl=*' } | Select-Object -First 1).Split('=')[1]; if (-not $ceTaskUrl) { throw 'ceTaskUrl missing in report-task.txt' }; if (-not $env:SONAR_AUTH_TOKEN) { throw 'SONAR_AUTH_TOKEN is missing in environment.' }; $pair = $env:SONAR_AUTH_TOKEN + ':'; $base64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair)); $headers = @{ Authorization = ('Basic ' + $base64) }; $analysisId = $null; for ($i = 0; $i -lt 180; $i++) { $task = Invoke-RestMethod -Uri $ceTaskUrl -Method Get -Headers $headers; if ($task.task.status -eq 'SUCCESS') { $analysisId = $task.task.analysisId; break }; if ($task.task.status -in @('FAILED','CANCELED')) { throw ('Sonar CE task failed with status: ' + $task.task.status) }; Start-Sleep -Seconds 5 }; if (-not $analysisId) { throw 'Timed out waiting for Sonar CE task completion.' }; $qgUrl = $env:SONAR_HOST_URL + '/api/qualitygates/project_status?analysisId=' + $analysisId; $qg = Invoke-RestMethod -Uri $qgUrl -Method Get -Headers $headers; $status = $qg.projectStatus.status; Write-Host ('Quality Gate status: ' + $status); if ($status -ne 'OK') { throw ('Quality Gate failed: ' + $status) }"
+'''
                 }
             }
         }

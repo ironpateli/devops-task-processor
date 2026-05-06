@@ -50,11 +50,16 @@ pipeline {
                 echo 'Running SonarQube Analysis...'
                 script {
                     def scannerHome = tool 'sonar-scanner'
+                    def jdkHome = tool 'jdk21'
                     withSonarQubeEnv('sonar-server') {
-                        if (isUnix()) {
-                            sh "${scannerHome}/bin/sonar-scanner"
-                        } else {
-                            bat "${scannerHome}\\bin\\sonar-scanner.bat"
+                        withEnv(["JAVA_HOME=${jdkHome}", "PATH+JAVA=${jdkHome}/bin"]) {
+                            if (isUnix()) {
+                                sh 'java -version'
+                                sh "${scannerHome}/bin/sonar-scanner"
+                            } else {
+                                bat 'java -version'
+                                bat "${scannerHome}\\bin\\sonar-scanner.bat"
+                            }
                         }
                     }
                 }

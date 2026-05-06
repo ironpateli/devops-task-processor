@@ -70,25 +70,44 @@ pipeline {
                             sh '''
                                 taskFile="${WORKSPACE}/.scannerwork/report-task.txt"
                                 if [ ! -f "$taskFile" ]; then
-                                    echo "ERROR: report-task.txt not found"
-                                    exit 1
+                                  echo "ERROR: report-task.txt not found"
+                                  exit 1
                                 fi
-                                ceTaskId=$(grep ceTaskId= "$taskFile" | cut -d= -f2)
-                                while true; do
-                                    result=$(curl -s -u "${SONAR_AUTH_TOKEN}:" "${SONAR_HOST_URL}/api/ce/activity?id=${ceTaskId}" | grep -o '"status":"[^"]*"' | head -1)
-                                    if [[ "$result" == *"SUCCESS"* ]]; then
-                                        echo "Task completed successfully"
-                                        break
-                                    elif [[ "$result" == *"FAILED"* ]]; then
-                                        echo "Task failed"
-                                        exit 1
-                                    fi
-                                    sleep 2
+                                ceTaskId=$(grep '^ceTaskId=' "$taskFile" | cut -d= -f2 | tr -d '\\r')
+                                if [ -z "$ceTaskId" ]; then
+                                  echo "ERROR: ceTaskId missing in report-task.txt"
+                                  exit 1
+                                fi
+                                hostUrl="${SONAR_HOST_URL%/}"
+                                analysisId=""
+                                for i in $(seq 1 180); do
+                                  ceJson=$(curl -s -u "${SONAR_AUTH_TOKEN}:" "${hostUrl}/api/ce/task?id=${ceTaskId}")
+                                  status=$(echo "$ceJson" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+                                  if [ "$status" = "SUCCESS" ]; then
+                                    analysisId=$(echo "$ceJson" | grep -o '"analysisId":"[^"]*"' | head -1 | cut -d'"' -f4)
+                                    break
+                                  fi
+                                  if [ "$status" = "FAILED" ] || [ "$status" = "CANCELED" ]; then
+                                    echo "ERROR: Sonar CE task failed with status: $status"
+                                    exit 1
+                                  fi
+                                  sleep 5
                                 done
+                                if [ -z "$analysisId" ]; then
+                                  echo "ERROR: Timed out waiting for Sonar CE task completion."
+                                  exit 1
+                                fi
+                                qgJson=$(curl -s -u "${SONAR_AUTH_TOKEN}:" "${hostUrl}/api/qualitygates/project_status?analysisId=${analysisId}")
+                                qgStatus=$(echo "$qgJson" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+                                echo "Quality Gate status: $qgStatus"
+                                if [ "$qgStatus" != "OK" ]; then
+                                  echo "ERROR: Quality Gate failed: $qgStatus"
+                                  exit 1
+                                fi
                             '''
                         } else {
                             bat '''
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $env:WORKSPACE '.scannerwork\\report-task.txt'; if (!(Test-Path $taskFile)) { throw 'report-task.txt not found' }; $ceTaskId = (Select-String -Path $taskFile -Pattern 'ceTaskId=([^\\r\\n]+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }); while ($true) { $result = (curl.exe -s -u \"${env:SONAR_AUTH_TOKEN}:\" \"${env:SONAR_HOST_URL}/api/ce/activity?id=${ceTaskId}\" | Select-String -Pattern '\"status\":\"([^\"]+)\"' | ForEach-Object { $_.Matches[0].Groups[1].Value }); if ($result -eq 'SUCCESS') { Write-Host 'Task completed successfully'; break } elseif ($result -eq 'FAILED') { throw 'Task failed' }; Start-Sleep -Seconds 2 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $env:WORKSPACE '.scannerwork\\report-task.txt'; if (!(Test-Path $taskFile)) { throw 'report-task.txt not found. Sonar analysis may not have completed.' }; $ceTaskId = ((Get-Content $taskFile | Where-Object { $_ -like 'ceTaskId=*' } | Select-Object -First 1).Split('=')[1]).Trim(); if (-not $ceTaskId) { throw 'ceTaskId missing in report-task.txt' }; $hostUrl = $env:SONAR_HOST_URL.TrimEnd('/'); if (-not $hostUrl) { throw 'SONAR_HOST_URL is missing in environment.' }; if (-not $env:SONAR_AUTH_TOKEN) { throw 'SONAR_AUTH_TOKEN is missing in environment.' }; $pair = $env:SONAR_AUTH_TOKEN + ':'; $base64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair)); $headers = @{ Authorization = ('Basic ' + $base64) }; $analysisId = $null; $ceApi = $hostUrl + '/api/ce/task?id=' + $ceTaskId; for ($i = 0; $i -lt 180; $i++) { $task = Invoke-RestMethod -Uri $ceApi -Method Get -Headers $headers; if ($task.task.status -eq 'SUCCESS') { $analysisId = $task.task.analysisId; break }; if ($task.task.status -in @('FAILED','CANCELED')) { throw ('Sonar CE task failed with status: ' + $task.task.status) }; Start-Sleep -Seconds 5 }; if (-not $analysisId) { throw 'Timed out waiting for Sonar CE task completion.' }; $qgUrl = $hostUrl + '/api/qualitygates/project_status?analysisId=' + $analysisId; $qg = Invoke-RestMethod -Uri $qgUrl -Method Get -Headers $headers; $status = $qg.projectStatus.status; Write-Host ('Quality Gate status: ' + $status); if ($status -ne 'OK') { throw ('Quality Gate failed: ' + $status) }"
                             '''
                         }
                     }

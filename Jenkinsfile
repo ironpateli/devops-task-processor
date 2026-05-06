@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = credentials('aws-region')
-        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = ''
         ECR_REPOSITORY_API = 'task-processor-api'
         ECR_REPOSITORY_WEB = 'task-processor-web'
         NODE_ENV = 'production'
@@ -178,7 +178,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$taskFile = Join-Path $e
     post {
         always {
             echo 'Pipeline execution finished.'
-            cleanWs()
         }
         success {
             echo 'Pipeline succeeded!'

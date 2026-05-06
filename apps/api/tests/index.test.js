@@ -1,4 +1,5 @@
-const assert = require('assert');
+const { test } = require('node:test');
+const assert = require('node:assert');
 
 // Mock database and Redis for testing
 class MockPool {
@@ -46,10 +47,10 @@ class MockRedis {
   }
 }
 
-// Test Suite
-describe('API Validation Tests', () => {
-  describe('Job Status Validation', () => {
-    test('should accept valid statuses', () => {
+// Test Suite using Node.js built-in test runner
+test('API Validation Tests', async (t) => {
+  await t.test('Job Status Validation', async (t) => {
+    await t.test('should accept valid statuses', () => {
       const validStatuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
       const isValidStatus = (status) => validStatuses.includes(status);
 
@@ -58,7 +59,7 @@ describe('API Validation Tests', () => {
       });
     });
 
-    test('should reject invalid statuses', () => {
+    await t.test('should reject invalid statuses', () => {
       const validStatuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
       const isValidStatus = (status) => validStatuses.includes(status);
       const invalidStatuses = ['INVALID', 'PENDING ', 'pending', ''];
@@ -69,13 +70,13 @@ describe('API Validation Tests', () => {
     });
   });
 
-  describe('Payload Validation', () => {
-    test('should reject empty payloads', () => {
+  await t.test('Payload Validation', async (t) => {
+    await t.test('should reject empty payloads', () => {
       const payload = '';
       assert.strictEqual(payload.length === 0, true);
     });
 
-    test('should accept valid payload lengths', () => {
+    await t.test('should accept valid payload lengths', () => {
       const MAX_PAYLOAD_LENGTH = 10000;
       const validPayloads = ['a', 'task data', 'x'.repeat(5000), 'x'.repeat(10000)];
 
@@ -88,15 +89,15 @@ describe('API Validation Tests', () => {
       });
     });
 
-    test('should reject oversized payloads', () => {
+    await t.test('should reject oversized payloads', () => {
       const MAX_PAYLOAD_LENGTH = 10000;
       const payload = 'x'.repeat(10001);
       assert.strictEqual(payload.length > MAX_PAYLOAD_LENGTH, true);
     });
   });
 
-  describe('Job ID Validation', () => {
-    test('should accept valid job IDs', () => {
+  await t.test('Job ID Validation', async (t) => {
+    await t.test('should accept valid job IDs', () => {
       const validIds = ['1', '100', '9999'];
       validIds.forEach(id => {
         const parsed = parseInt(id);
@@ -104,7 +105,7 @@ describe('API Validation Tests', () => {
       });
     });
 
-    test('should reject invalid job IDs', () => {
+    await t.test('should reject invalid job IDs', () => {
       const invalidIds = ['0', '-1', 'abc', '', 'null'];
       invalidIds.forEach(id => {
         const parsed = parseInt(id);
@@ -113,57 +114,57 @@ describe('API Validation Tests', () => {
     });
   });
 
-  describe('Pagination Validation', () => {
-    test('should apply limit cap', () => {
+  await t.test('Pagination Validation', async (t) => {
+    await t.test('should apply limit cap', () => {
       const limit = Math.min(parseInt('2000'), 1000);
       assert.strictEqual(limit, 1000);
     });
 
-    test('should use default offset', () => {
+    await t.test('should use default offset', () => {
       const offset = parseInt(undefined) || 0;
       assert.strictEqual(offset, 0);
     });
 
-    test('should parse valid offset', () => {
+    await t.test('should parse valid offset', () => {
       const offset = parseInt('50') || 0;
       assert.strictEqual(offset, 50);
     });
   });
 
-  describe('Database Connection', () => {
-    test('should handle database pool initialization', async () => {
+  await t.test('Database Connection', async (t) => {
+    await t.test('should handle database pool initialization', async () => {
       const pool = new MockPool();
       const result = await pool.query('CREATE TABLE IF NOT EXISTS jobs (id SERIAL PRIMARY KEY)');
       assert.strictEqual(Array.isArray(result.rows), true);
     });
 
-    test('should handle successful database queries', async () => {
+    await t.test('should handle successful database queries', async () => {
       const pool = new MockPool();
       const result = await pool.query('SELECT 1');
       assert.strictEqual(result.rows.length > 0, true);
     });
 
-    test('should handle pool cleanup', async () => {
+    await t.test('should handle pool cleanup', async () => {
       const pool = new MockPool();
       const result = await pool.end();
       assert.strictEqual(result, true);
     });
   });
 
-  describe('Redis Connection', () => {
-    test('should handle Redis ping', async () => {
+  await t.test('Redis Connection', async (t) => {
+    await t.test('should handle Redis ping', async () => {
       const redis = new MockRedis();
       const result = await redis.ping();
       assert.strictEqual(result, 'PONG');
     });
 
-    test('should handle Redis lpush', async () => {
+    await t.test('should handle Redis lpush', async () => {
       const redis = new MockRedis();
       const result = await redis.lpush('job_queue', JSON.stringify({ id: 1 }));
       assert.strictEqual(result, 1);
     });
 
-    test('should handle Redis disconnect', () => {
+    await t.test('should handle Redis disconnect', () => {
       const redis = new MockRedis();
       const result = redis.disconnect();
       assert.strictEqual(result, true);
@@ -171,5 +172,4 @@ describe('API Validation Tests', () => {
   });
 });
 
-// Run tests with better output
-console.log('\n✓ API Validation Tests Completed');
+console.log('\n✓ Test suite completed');
